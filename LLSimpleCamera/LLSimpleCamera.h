@@ -1,93 +1,176 @@
 //
 //  CameraViewController.h
-//  Frizzbee
+//  LLSimpleCamera
 //
 //  Created by Ömer Faruk Gül on 24/10/14.
-//  Copyright (c) 2014 Louvre Digital. All rights reserved.
+//  Copyright (c) 2014 Ömer Farul Gül. All rights reserved.
 //
 
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 
 typedef enum : NSUInteger {
-    CameraPositionBack,
-    CameraPositionFront
-} CameraPosition;
+    LLCameraPositionRear,
+    LLCameraPositionFront
+} LLCameraPosition;
 
 typedef enum : NSUInteger {
     // The default state has to be off
-    // FIXES: Unresposive first touch to toggle flash.
-    CameraFlashOff,
-    CameraFlashOn
-} CameraFlash;
+    LLCameraFlashOff,
+    LLCameraFlashOn,
+    LLCameraFlashAuto
+} LLCameraFlash;
 
 typedef enum : NSUInteger {
-    CameraQualityLow,
-    CameraQualityMedium,
-    CameraQualityHigh,
-    CameraQualityPhoto
-} CameraQuality;
+    // The default state has to be off
+    LLCameraMirrorOff,
+    LLCameraMirrorOn,
+    LLCameraMirrorAuto
+} LLCameraMirror;
 
-@protocol LLSimpleCameraDelegate;
+extern NSString *const LLSimpleCameraErrorDomain;
+typedef enum : NSUInteger {
+    LLSimpleCameraErrorCodeCameraPermission = 10,
+    LLSimpleCameraErrorCodeMicrophonePermission = 11,
+    LLSimpleCameraErrorCodeSession = 12,
+    LLSimpleCameraErrorCodeVideoNotEnabled = 13
+} LLSimpleCameraErrorCode;
 
 @interface LLSimpleCamera : UIViewController
 
 /**
-The LLSimpleCameraDelegate delegate.
+ * Triggered on device change.
  */
-@property (nonatomic, weak) id<LLSimpleCameraDelegate> delegate;
+@property (nonatomic, copy) void (^onDeviceChange)(LLSimpleCamera *camera, AVCaptureDevice *device);
 
 /**
- The status of the camera flash.
+ * Triggered on any kind of error.
  */
-@property (nonatomic) CameraFlash cameraFlash;
-/**
- The position of the camera.
- */
-@property (nonatomic) CameraPosition cameraPosition;
+@property (nonatomic, copy) void (^onError)(LLSimpleCamera *camera, NSError *error);
 
 /**
- Fixess the orientation after the image is captured is set to Yes.
- see: http://stackoverflow.com/questions/5427656/ios-uiimagepickercontroller-result-image-orientation-after-upload
+ * Camera quality, set a constants prefixed with AVCaptureSessionPreset.
+ * Make sure to call before calling -(void)initialize method, otherwise it would be late.
+ */
+@property (copy, nonatomic) NSString *cameraQuality;
+
+/**
+ * Camera flash mode.
+ */
+@property (nonatomic, readonly) LLCameraFlash flash;
+
+/**
+ * Camera mirror mode.
+ */
+@property (nonatomic) LLCameraMirror mirror;
+
+/**
+ * Position of the camera.
+ */
+@property (nonatomic) LLCameraPosition position;
+
+/**
+ * Boolean value to indicate if the video is enabled.
+ */
+@property (nonatomic, getter=isVideoEnabled) BOOL videoEnabled;
+
+/**
+ * Boolean value to indicate if the camera is recording a video at the current moment.
+ */
+@property (nonatomic, getter=isRecording) BOOL recording;
+
+/**
+ * Fixess the orientation after the image is captured is set to Yes.
+ * see: http://stackoverflow.com/questions/5427656/ios-uiimagepickercontroller-result-image-orientation-after-upload
  */
 @property (nonatomic) BOOL fixOrientationAfterCapture;
 
 /**
- Returns an instance of LLSimpleCamera with the given quality.
- @param quality The quality of the camera.
+ * Set NO if you don't want ot enable user triggered focusing. Enabled by default.
  */
-- (instancetype)initWithQuality:(CameraQuality)quality;
+@property (nonatomic) BOOL tapToFocus;
 
 /**
- Starts running the camera session.
+ * Set YES if you your view controller does not allow autorotation,
+ * however you want to take the device rotation into account no matter what. Disabled by default.
+ */
+@property (nonatomic) BOOL useDeviceOrientation;
+
+/**
+ * Use this method to request camera permission before initalizing LLSimpleCamera.
+ */
++ (void)requestCameraPermission:(void (^)(BOOL granted))completionBlock;
+
+/**
+ * Use this method to request microphone permission before initalizing LLSimpleCamera.
+ */
++ (void)requestMicrophonePermission:(void (^)(BOOL granted))completionBlock;
+
+/**
+ * Returns an instance of LLSimpleCamera with the given quality.
+ * Quality parameter could be any variable starting with AVCaptureSessionPreset.
+ */
+- (instancetype)initWithQuality:(NSString *)quality position:(LLCameraPosition)position videoEnabled:(BOOL)videoEnabled;
+
+/**
+ * Returns an instance of LLSimpleCamera with quality "AVCaptureSessionPresetHigh" and position "CameraPositionBack".
+ * @param videEnabled: Set to YES to enable video recording.
+ */
+- (instancetype)initWithVideoEnabled:(BOOL)videoEnabled;
+
+/**
+ * Starts running the camera session.
  */
 - (void)start;
 
 /**
- Stops the running camera session. Needs to be called when the app doesn't show the view.
+ * Stops the running camera session. Needs to be called when the app doesn't show the view.
  */
 - (void)stop;
 
 /**
- Attaches the LLSimpleCamera to another vs with a delegate. It basically adds the LLSimpleCamera as a
- child vc to the given vc.
- @param vc A view controller.
- @param delegate The LLSimpleCamera delegate vc.
+ * Capture an image.
+ * @param onCapture a block triggered after the capturing the photo.
+ * @param exactSeenImage If set YES, then the image is cropped to the exact size as the preview. So you get exactly what you see.
  */
-- (void)attachToViewController:(UIViewController *)vc withDelegate:(id<LLSimpleCameraDelegate>)delegate;
+-(void)capture:(void (^)(LLSimpleCamera *camera, UIImage *image, NSDictionary *metadata, NSError *error))onCapture exactSeenImage:(BOOL)exactSeenImage;
 
 /**
- Changes the posiition of the camera (either back or front) and returns the final position.
+ * Capture an image.
+ * @param onCapture a block triggered after the capturing the photo.
  */
-- (CameraPosition)togglePosition;
+-(void)capture:(void (^)(LLSimpleCamera *camera, UIImage *image, NSDictionary *metadata, NSError *error))onCapture;
+
+/*
+ * Start recording a video. Video is saved to the given url.
+ */
+- (void)startRecordingWithOutputUrl:(NSURL *)url;
 
 /**
- Toggles the flash. If the device doesn't have a flash it returns CameraFlashOff.
+ * Stop recording video with a completion block.
  */
-- (CameraFlash)toggleFlash;
+- (void)stopRecording:(void (^)(LLSimpleCamera *camera, NSURL *outputFileUrl, NSError *error))completionBlock;
 
 /**
- Checks if flash is avilable for the currently active device.
+ * Attaches the LLSimpleCamera to another view controller with a frame. It basically adds the LLSimpleCamera as a
+ * child vc to the given vc.
+ * @param vc A view controller.
+ * @param frame The frame of the camera.
+ */
+- (void)attachToViewController:(UIViewController *)vc withFrame:(CGRect)frame;
+
+/**
+ * Changes the posiition of the camera (either back or front) and returns the final position.
+ */
+- (LLCameraPosition)togglePosition;
+
+/**
+ * Update the flash mode of the camera. Returns true if it is successful. Otherwise false.
+ */
+- (BOOL)updateFlashMode:(LLCameraFlash)cameraFlash;
+
+/**
+ * Checks if flash is avilable for the currently active device.
  */
 - (BOOL)isFlashAvailable;
 
@@ -95,22 +178,24 @@ The LLSimpleCameraDelegate delegate.
 - (void) focusAtPoint: (CGPoint) point;
 
 /**
- Capture the image.
+ * Checks if torch (flash for video) is avilable for the currently active device.
  */
-- (void)capture;
-@end
-
-@protocol LLSimpleCameraDelegate <NSObject>
-/**
- Triggered when the active camera device is changed. Programmer can use isFlashAvailable to check if the flash
- is available and show the related icons.
- */
-- (void)cameraViewController:(LLSimpleCamera*)cameraVC
-             didChangeDevice:(AVCaptureDevice *)device;
+- (BOOL)isTorchAvailable;
 
 /**
- Triggered after the image is captured by the camera.
+ * Alter the layer and the animation displayed when the user taps on screen.
+ * @param layer Layer to be displayed
+ * @param animation to be applied after the layer is shown
  */
-- (void)cameraViewController:(LLSimpleCamera*)cameraVC
-             didCaptureImage:(UIImage *)image;
+- (void)alterFocusBox:(CALayer *)layer animation:(CAAnimation *)animation;
+
+/**
+ * Checks is the front camera is available.
+ */
++ (BOOL)isFrontCameraAvailable;
+
+/**
+ * Checks is the rear camera is available.
+ */
++ (BOOL)isRearCameraAvailable;
 @end
